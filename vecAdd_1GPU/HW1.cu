@@ -1,8 +1,3 @@
-// Vector addition: C = 1/A + 1/B.
-// compile with the following command:
-//
-// (for GTX1060)
-// nvcc -arch=compute_61 -code=sm_61,sm_61 -O2 -m64 -o vecAdd vecAdd.cu
 
 __global__ void matrixAdd(float* A, float* B, float* C, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
