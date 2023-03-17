@@ -1,0 +1,10 @@
+1
+163840007
+128
+256
+
+=============
+1          device number
+163840007  vector size
+128        block size
+256        grid size
