@@ -58,12 +58,6 @@ int main() {
     cudaDeviceSynchronize();
 
 
-
-
-eSt aCe
-keep going
-scss
-Copy code
 // calculate the maximum absolute error
 float maxError = 0.0f;
 for (int i = 0; i < N; ++i) {
