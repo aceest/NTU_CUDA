@@ -4,84 +4,106 @@
 // (for GTX1060)
 // nvcc -arch=compute_61 -code=sm_61,sm_61 -O2 -m64 -o vecAdd vecAdd.cu
 
+__global__ void matrixAdd(float* A, float* B, float* C, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-
-#define N 6400
-#define BLOCK_SIZE 16
-
-__global__ void matrix_addition(float *a, float *b, float *c, int n) {
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n && j < n) {
-        int index = i * n + j;
-        c[index] = a[index] + b[index];
+    if (i < N && j < N) {
+        int index = i * N + j;
+        C[index] = A[index] + B[index];
     }
 }
 
 int main() {
-    float *a, *b, *c;
-    float *d_a, *d_b, *d_c;
-    int matrix_size = N * N * sizeof(float);
-    int i, j;
-    int block_size_x, block_size_y;
-    dim3 block_dim, grid_dim;
-    clock_t start, end;
-    double cpu_time_used, gpu_time_used;
-    float random_number;
+    const int N = 6400; // size of the matrix
+    const int blockSizes[6][2] = {{4, 4}, {8, 8}, {10, 10}, {16, 16}, {20, 20}, {32, 32}};
 
-    // Allocate memory on the host
-    a = (float*) malloc(matrix_size);
-    b = (float*) malloc(matrix_size);
-    c = (float*) malloc(matrix_size);
+    // Allocate memory for matrices A, B, and C on host
+    float* A = new float[N * N];
+    float* B = new float[N * N];
+    float* C = new float[N * N];
+    float* D = new float[N * N];
 
-    // Allocate memory on the device
-    cudaMalloc(&d_a, matrix_size);
-    cudaMalloc(&d_b, matrix_size);
-    cudaMalloc(&d_c, matrix_size);
+    // Initialize matrices A and B with random values
+    srand(0);
+    randomInit(A, N * N);
+    randomInit(B, N * N);
 
-    // Initialize matrices a and b with random numbers
-    srand(time(NULL));
-    for (i = 0; i < N; i++) {
-        for (j = 0; j < N; j++) {
-            random_number = (float) rand() / (float) RAND_MAX;
-            a[i * N + j] = random_number;
-            random_number = (float) rand() / (float) RAND_MAX;
-            b[i * N + j] = random_number;
+    float* d_A, * d_B, * d_C;
+    cudaMalloc(&d_A, N * N * sizeof(float));
+    cudaMalloc(&d_B, N * N * sizeof(float));
+    cudaMalloc(&d_C, N * N * sizeof(float));
+
+    cudaMemcpy(d_A, A, N * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, N * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Find optimal block size
+    int maxThreads = 0;
+    dim3 optimalBlock(1, 1);
+    for (int i = 0; i < 6; ++i) {
+        dim3 blockSize(blockSizes[i][0], blockSizes[i][1]);
+        dim3 numBlocks((N + blockSize.x - 1) / blockSize.x, (N + blockSize.y - 1) / blockSize.y);
+        int threads = numBlocks.x * numBlocks.y * blockSize.x * blockSize.y;
+        if (threads > maxThreads && threads <= 1024) {
+            maxThreads = threads;
+            optimalBlock = blockSize;
         }
     }
 
-    // Copy data from host to device
-    cudaMemcpy(d_a, a, matrix_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, b, matrix_size, cudaMemcpyHostToDevice);
+    printf("Optimal block size: (%d, %d)\n", optimalBlock.x, optimalBlock.y);
 
-    // Perform matrix addition on the GPU with different block sizes
-    for (block_size_x = 4; block_size_x <= 32; block_size_x += 4) {
-        block_size_y = BLOCK_SIZE / block_size_x;
-        block_dim = dim3(block_size_x, block_size_y, 1);
-        grid_dim = dim3((N + block_size_x - 1) / block_size_x, (N + block_size_y - 1) / block_size_y, 1);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 
-        start = clock();
-        matrix_addition<<<grid_dim, block_dim>>>(d_a, d_b, d_c, N);
-        cudaDeviceSynchronize();
-        end = clock();
+    cudaEventRecord(start, 0);
 
-        gpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("Block size (%d, %d): %f seconds\n", block_size_x, block_size_y, gpu_time_used);
-    }
+    // Launch kernel on the device
+    matrixAdd<<<dim3((N + optimalBlock.x - 1) / optimalBlock.x, (N + optimalBlock.y - 1) / optimalBlock.y), optimalBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
 
-    // Perform matrix addition on the CPU
-    start = clock();
-    for (i = 0; i < N; i++) {
-        for (j = 0; j < N; j++) {
-            c[i * N + j] = a[i * N + j] + b[i * N + j];
-        }
-    }
-    end = clock();
 
-    cpu_time_used = ((double) (end - start)) / CLOCKS_PER
+
+
+eSt aCe
+keep going
+scss
+Copy code
+// calculate the maximum absolute error
+float maxError = 0.0f;
+for (int i = 0; i < N; ++i) {
+    float error = fabs( (1.0/h_A[i] + 1.0/h_B[i]) - h_C[i] );
+    maxError = fmaxf(error, maxError);
+}
+
+// Release host memory
+free(h_A);
+free(h_B);
+free(h_C);
+free(h_D);
+
+// Exit and clean up
+if (maxError < 1e-5) {
+    printf("Test PASSED\n");
+}
+else {
+    printf("Test FAILED\n");
+}
+return 0;
+}
+
+// Randomly initialize an array
+void RandomInit(float* data, int size)
+{
+for (int i = 0; i < size; ++i)
+data[i] = rand() / (float)RAND_MAX;
+}
+
+
+
+
+
+
 
 
 
