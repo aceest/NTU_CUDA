@@ -24,7 +24,6 @@ void RandomInit(float*, int);
 // Device code
 __global__ void MatAdd(const float* A, const float* B, float* C, int N)
 {
-
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     int j = blockDim.y * blockIdx.y + threadIdx.y;
     if (i < N && j < N){
@@ -32,11 +31,6 @@ __global__ void MatAdd(const float* A, const float* B, float* C, int N)
        	    C[index] = A[index] + B[index];
     }
     __syncthreads();
-
-    if (i < N && j < N) {
-        int index = i * N + j;
-        C[index] = A[index] + B[index];
-    }
 }
 
 int main() {
@@ -235,7 +229,7 @@ loop:
     for (int i = 0; i < N; ++i) {
 	    for ( int j = 0; j < N; ++j){
 	    	int index = i*N + j;
-		diff = abs(h_D[index] - h_C[index]);
+		    diff = abs(h_D[index] - h_C[index]);
 	    	sum += diff*diff;
 	    }
       
