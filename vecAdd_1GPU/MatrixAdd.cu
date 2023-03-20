@@ -1,4 +1,3 @@
-<<<<<<< HEAD:vecAdd_1GPU/MatrixAdd.cu
 // <atrix addition: C = A + B.
 // compile with the following command:
 //
@@ -33,12 +32,6 @@ __global__ void MatAdd(const float* A, const float* B, float* C, int N)
        	    C[index] = A[index] + B[index];
     }
     __syncthreads();
-=======
-
-__global__ void matrixAdd(float* A, float* B, float* C, int N) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
->>>>>>> efa98c47390fa013df17cfe61d8e61c1c15c4741:vecAdd_1GPU/HW1.cu
 
     if (i < N && j < N) {
         int index = i * N + j;
@@ -84,7 +77,6 @@ int main() {
 
     printf("Optimal block size: (%d, %d)\n", optimalBlock.x, optimalBlock.y);
 
-<<<<<<< HEAD:vecAdd_1GPU/MatrixAdd.cu
     printf("Matrix Addition: C = A + B\n");
     int mem = 1024*1024*1024;     // Giga    
     int N;
@@ -97,13 +89,6 @@ int main() {
       exit(2);
     }
     long size = N * N * sizeof(float);
-=======
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-
-    cudaEventRecord(start, 0);
->>>>>>> efa98c47390fa013df17cfe61d8e61c1c15c4741:vecAdd_1GPU/HW1.cu
 
     // Launch kernel on the device
     matrixAdd<<<dim3((N + optimalBlock.x - 1) / optimalBlock.x, (N + optimalBlock.y - 1) / optimalBlock.y), optimalBlock>>>(d_A, d_B, d_C, N);
@@ -117,16 +102,8 @@ for (int i = 0; i < N; ++i) {
     maxError = fmaxf(error, maxError);
 }
 
-<<<<<<< HEAD:vecAdd_1GPU/MatrixAdd.cu
     RandomInit(h_A, N*N);
     RandomInit(h_B, N*N);
-=======
-// Release host memory
-free(h_A);
-free(h_B);
-free(h_C);
-free(h_D);
->>>>>>> efa98c47390fa013df17cfe61d8e61c1c15c4741:vecAdd_1GPU/HW1.cu
 
 // Exit and clean up
 if (maxError < 1e-5) {
@@ -145,7 +122,6 @@ for (int i = 0; i < size; ++i)
 data[i] = rand() / (float)RAND_MAX;
 }
 
-<<<<<<< HEAD:vecAdd_1GPU/MatrixAdd.cu
     int threadsPerBlock;
 loop:
     printf("Enter the number of threads per block: ");
@@ -269,10 +245,6 @@ loop:
     }
     sum = sqrt(sum);
     printf("norm(h_C - h_D)=%20.15e\n\n",sum);
-=======
-
-
->>>>>>> efa98c47390fa013df17cfe61d8e61c1c15c4741:vecAdd_1GPU/HW1.cu
 
 
 
