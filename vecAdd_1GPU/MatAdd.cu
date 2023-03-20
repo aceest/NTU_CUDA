@@ -60,7 +60,7 @@ int main( )
     int mem = 1024*1024*1024;     // Giga    
     int N;
 
-    printf("Enter the size of the vectors: ");
+    printf("Enter the size of the matrix: ");
     scanf("%d",&N);        
     printf("%d\n",N);        
     if( N*N > mem ) {     // each real number (float) takes 4 bytes
