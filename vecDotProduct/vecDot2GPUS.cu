@@ -9,6 +9,8 @@
 // Includes
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>          // header for OpenMP
+#include <cuda_runtime.h>
 
 // Variables
 float* h_A;   // host vectors
@@ -60,89 +62,109 @@ __global__ void VecDot(const float* A, const float* B, float* C, int N)
 
 int main(void)
 {
+    printf("\n");
+    printf("Vector Dot product with multiple GPUs \n");
+    int N, NGPU, cpu_thread_id=0;
+    int *Dev; 
+    long mem = 1024*1024*1024;     // 4 Giga for float data type.
 
-    int gid;
+    printf("Enter the number of GPUs: ");
+    scanf("%d", &NGPU);
+    printf("%d\n", NGPU);
+    Dev = (int *)malloc(sizeof(int)*NGPU);
 
-    // Error code to check return values for CUDA calls
-    cudaError_t err = cudaSuccess;
-
-    printf("Enter the GPU ID: ");
-    scanf("%d",&gid);
-    printf("%d\n", gid);
-    err = cudaSetDevice(gid);
-    if (err != cudaSuccess) {
-        printf("!!! Cannot select GPU with device ID = %d\n", gid);
-        exit(1);
+    int numDev = 0;
+    printf("GPU device number: ");
+    for(int i = 0; i < NGPU; i++) {
+      scanf("%d", &Dev[i]);
+      printf("%d ",Dev[i]);
+      numDev++;
+      if(getchar() == '\n') break;
     }
-    printf("Set GPU with device ID = %d\n", gid);
-
-    cudaSetDevice(gid);
-
-    printf("Vector Dot Product: A.B\n");
-    int N;
+    printf("\n");
+    if(numDev != NGPU) {
+      fprintf(stderr,"Should input %d GPU device numbers\n", NGPU);
+      exit(1);
+    }
 
     printf("Enter the size of the vectors: ");
-    scanf("%d",&N);        
-    printf("%d\n",N);        
+    scanf("%d", &N);        
+    printf("%d\n", N);        
+    if (3*N > mem) {
+        printf("The size of these 3 vectors cannot be fitted into 4 Gbyte\n");
+        exit(1);
+    }
+    long size = N*sizeof(float);
 
     // Set the sizes of threads and blocks
-
     int threadsPerBlock;
-    printf("Enter the number (2^m) of threads per block: ");
-    scanf("%d",&threadsPerBlock);
-    printf("%d\n",threadsPerBlock);
-    if( threadsPerBlock > 1024 ) {
+    printf("Enter the number of threads per block: ");
+    scanf("%d", &threadsPerBlock);
+    printf("%d\n", threadsPerBlock);
+    if(threadsPerBlock > 1024) {
       printf("The number of threads per block must be less than 1024 ! \n");
-      exit(0);
+      exit(1);
     }
-
-//    int blocksPerGrid = (N + threadsPerBlock - 1)/threadsPerBlock;
-//    printf("The number of blocks per grid:%d\n",blocksPerGrid);
- 
-    int blocksPerGrid;
-    printf("Enter the number of blocks per grid: ");
-    scanf("%d",&blocksPerGrid);
-    printf("%d\n",blocksPerGrid);
-
-    if( blocksPerGrid > 2147483647 ) {
+    int blocksPerGrid = (N + threadsPerBlock*NGPU - 1) / (threadsPerBlock*NGPU);
+    printf("The number of blocks is %d\n", blocksPerGrid);
+    if(blocksPerGrid > 2147483647) {
       printf("The number of blocks must be less than 2147483647 ! \n");
-      exit(0);
+      exit(1);
     }
 
     // Allocate input vectors h_A and h_B in host memory
-
-    int size = N * sizeof(float);
-    int sb = blocksPerGrid * sizeof(float);
-
     h_A = (float*)malloc(size);
     h_B = (float*)malloc(size);
-    h_C = (float*)malloc(sb);     // contains the result of dot-product from each block
+    h_C = (float*)malloc(size);
+    if (! h_A || ! h_B || ! h_C) {
+	      printf("!!! Not enough memory.\n");
+	      exit(1);
+    }
     
     // Initialize input vectors
 
     RandomInit(h_A, N);
     RandomInit(h_B, N);
+    // Initialize h_C to zero
+    memset(h_C, 0, size);
 
-
-    // create the timer
+    
+    //float Intime,gputime,Outime;
+     // create the timer
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
+    omp_set_num_threads(NGPU);
+    double* h_G = (double*)malloc(sizeof(double) * NGPU);
+
+    #pragma omp parallel private(cpu_thread_id)
+    {
+	    float *d_A, *d_B, *d_C;
+	    cpu_thread_id = omp_get_thread_num();
+	    cudaSetDevice(Dev[cpu_thread_id]);
+      //cudaSetDevice(cpu_thread_id);
+
+     // Create the timer for each thread
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+   
 
     // start the timer
     cudaEventRecord(start,0);
 
-    // Allocate vectors in device memory
 
-    cudaMalloc((void**)&d_A, size);
-    cudaMalloc((void**)&d_B, size);
-    cudaMalloc((void**)&d_C, sb);
+    // Allocate vectors in device memory
+	  cudaMalloc((void**)&d_A, size/NGPU);
+	  cudaMalloc((void**)&d_B, size/NGPU);
+	  cudaMalloc((void**)&d_C, size/NGPU);
 
     // Copy vectors from host memory to device memory
+	  cudaMemcpy(d_A, h_A+N/NGPU*cpu_thread_id, size/NGPU, cudaMemcpyHostToDevice);
+	  cudaMemcpy(d_B, h_B+N/NGPU*cpu_thread_id, size/NGPU, cudaMemcpyHostToDevice);
+	  //#pragma omp barrier
 
-    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
-    
+  
     // stop the timer
     cudaEventRecord(stop,0);
     cudaEventSynchronize(stop);
@@ -154,8 +176,8 @@ int main(void)
     // start the timer
     cudaEventRecord(start,0);
 
-    int sm = threadsPerBlock*sizeof(float);
-    VecDot <<< blocksPerGrid, threadsPerBlock, sm >>>(d_A, d_B, d_C, N);
+    VecDot<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N/NGPU);
+	  cudaDeviceSynchronize();
     
     // stop the timer
     cudaEventRecord(stop,0);
@@ -172,20 +194,31 @@ int main(void)
     // start the timer
     cudaEventRecord(start,0);
 
-    cudaMemcpy(h_C, d_C, sb, cudaMemcpyDeviceToHost);
-
+    
+    cudaMemcpy(h_C+N/NGPU*cpu_thread_id, d_C, size/NGPU, cudaMemcpyDeviceToHost);
+	
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
 
-    double h_G=0.0;
-    for(int i = 0; i < blocksPerGrid; i++) 
-      h_G += (double) h_C[i];
-    
+   // Store the result in h_G array
+    h_G[cpu_thread_id] = 0.0;
+    for (int i = 0; i < blocksPerGrid; i++) 
+        h_G[cpu_thread_id] += (double) h_C[i];
+     // Destroy the timer for each thread
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
 
+        // Reset CUDA device
+        cudaDeviceReset();
+     // Final sum reduction
+    double h_G_total = 0.0;
+    for (int i = 0; i < NGPU; i++) {
+        h_G_total += h_G[i];
+    }
     // stop the timer
-    cudaEventRecord(stop,0);
-    cudaEventSynchronize(stop);
+    //cudaEventRecord(stop,0);
+    //cudaEventSynchronize(stop);
 
     float Outime;
     cudaEventElapsedTime( &Outime, start, stop);
@@ -221,24 +254,27 @@ int main(void)
     // check result
 
     printf("Check result:\n");
-    double diff = abs( (h_D - h_G)/h_D );
+    double diff = fabs( (h_D - h_G_total)/h_D );
     printf("|(h_G - h_D)/h_D|=%20.15e\n",diff);
-    printf("h_G =%20.15e\n",h_G);
+    printf("h_G =%20.15e\n",h_G_total);
     printf("h_D =%20.15e\n",h_D);
 
+    // Free host memory
     free(h_A);
     free(h_B);
     free(h_C);
 
     cudaDeviceReset();
+    }
 }
 
 
-// Allocates an array with random float entries in (-1,1)
+
+// Allocates an array with random float entries.
 void RandomInit(float* data, int n)
 {
     for (int i = 0; i < n; ++i)
-        data[i] = 2.0*rand()/(float)RAND_MAX - 1.0;
+        data[i] = rand() / (float)RAND_MAX;
 }
 
 
